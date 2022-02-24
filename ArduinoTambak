@@ -1,0 +1,136 @@
+// Library Komponen Pada Arduino
+#include <Wire.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <EEPROM.h>
+#include <GravityTDS.h>
+#include <Servo.h>
+#include <HX711_ADC.h>
+#include <Arduino.h>
+
+
+// Define PIN
+#define PhSensorPin  A0       //Pin pH on Arduino
+#define ONE_WIRE_BUS A1       //Pin Suhu on Arduino
+#define TdsSensorPin A2       //Pin TDS on Arduino
+#define PinServo     4        //Pin Servo Keluar Pakan
+const int DataLoadCell = 5;   //Pin Data Load Cell
+const int sckLoadCell = 6;    //Pin clk Load Cell
+
+
+// Setup Sensor pH
+float phcalibration_value = 21.34 - 0.075;
+unsigned long int avgval; 
+int buffer_arr[10],temp;
+
+// Start Sensor
+OneWire oneWire(ONE_WIRE_BUS);  
+DallasTemperature sensors(&oneWire);
+GravityTDS gravityTds;
+Servo servo;
+HX711_ADC LoadCell(DataLoadCell, sckLoadCell);
+
+// Variabel Sensor
+float phValue,suhuValue,tdsValue = 0,beratValue;
+
+// Variabel Pemberian Pakan
+int deploy;
+
+
+void setup() {
+  
+ Wire.begin();
+ Serial.begin(9600);
+ sensors.begin();
+  gravityTds.setPin(TdsSensorPin);
+  gravityTds.setAref(5.0);  //reference voltage on ADC, default 5.0V on Arduino UNO
+  gravityTds.setAdcRange(1024);  //1024 for 10bit ADC;4096 for 12bit ADC
+  gravityTds.begin();  //initialization  
+ 
+  servo.attach(PinServo);
+  servo.write(0);
+
+  LoadCell.begin();
+  LoadCell.start(100);
+  LoadCell.setCalFactor(101.07425);
+
+}
+
+void loop() 
+{
+  //baca permintaan dari Nodemcu
+  String minta = "";
+  //baca permintaan nodeMCU
+  while (Serial.available()>0)
+  {
+    minta += char(Serial.read());
+  }
+
+  //buang spasi data yang diterima
+  minta.trim();
+  
+  //uji variabel minta
+  if(minta == "Ya")
+  {
+    //kirim datanya
+    kirimdata();
+  }
+  minta = "";  
+  delay(1000);
+}
+
+void kirimdata()
+{
+
+//Pembacaan Nilai pH
+
+ 
+  for(int i=0;i<10;i++) 
+ { 
+ buffer_arr[i]=analogRead(PhSensorPin);
+ }
+    for(int i=0;i<9;i++)
+ {
+    for(int j=i+1;j<10;j++)
+ {
+    if(buffer_arr[i]>buffer_arr[j])
+ {
+ temp=buffer_arr[i];
+ buffer_arr[i]=buffer_arr[j];
+ buffer_arr[j]=temp;
+ }
+ }
+ }
+ avgval=0;
+ for(int i=2;i<8;i++)
+ avgval+=buffer_arr[i];
+ float volt=(float)avgval*5.0/1024/6; 
+ float phValue = -5.70 * volt + phcalibration_value; //Value Real pH
+ 
+
+
+//Pembacaan Nilai Suhu
+  sensors.requestTemperatures();
+  float suhuValue = sensors.getTempCByIndex(0);
+
+
+//Pembacaan Nilai TDS
+    gravityTds.update();  //sample and calculate
+    tdsValue = gravityTds.getTdsValue();  // then get the value  
+    
+  
+//Pembacaan Berat Pakan
+    LoadCell.update();
+    beratValue = LoadCell.getData();
+    if(beratValue<0) {beratValue=0;}
+    
+
+      
+//Pengiriman Data
+
+    // Variabel Penampung Data Yang Dikirim
+    String datakirim = String(phValue) + "#" + String(suhuValue) + "#" + String(tdsValue,0) + "#" + String(beratValue);
+    //Kirim Data ke NodeMCU
+    Serial.println(datakirim);
+
+} 
