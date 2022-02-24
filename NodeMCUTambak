@@ -1,0 +1,133 @@
+#include <SoftwareSerial.h>
+#include <Wire.h> 
+#include <AntaresESP8266MQTT.h>
+#include<Servo.h>
+Servo servo;
+
+//Access Key Antares
+#define ACCESSKEY "37d9106765d620de:fb99706bbb3c1344"
+
+//SSID dan Password Wifi
+#define WIFISSID "rwiroseno"
+#define PASSWORD "kolonelnanut"
+
+//Nama Aplikasi Antares
+#define projectName "MonitoringTambakUdang"
+//Nama Device Antares
+#define deviceNameSatu "Monitoring"
+#define deviceName "Pakan"
+
+
+AntaresESP8266MQTT antares(ACCESSKEY);
+
+//buat variabel untuk software serial (Rx,Tx)
+SoftwareSerial DataSerial(12,13);
+
+//millis sebagai pengganti delay
+unsigned long previousMillis = 0;
+const long interval = 3000;
+
+//variabel array untuk data parsing
+String arrData[4];
+float suhu,ph,tds,berat;
+
+
+
+void setup() {
+
+ Serial.begin(9600);
+ DataSerial.begin(9600);
+ servo.attach(4);
+ servo.write(20);
+ antares.setDebug(true);
+ antares.wifiConnection(WIFISSID, PASSWORD);
+ antares.setMqttServer();
+ antares.setCallback(callback); 
+}
+
+void loop() {
+  
+  antares.checkMqttConnection();
+//konfigurasi millis
+  unsigned long currentMillis = millis(); //baca waktu millis saat ini
+  if(currentMillis - previousMillis >= interval)
+  {
+    //update previousMillis
+    previousMillis = currentMillis;
+    
+    //prioritas pembacaan data dari arduino uno (hasil kiriman data) 
+    //baca data serial
+    String data = " ";
+    while(DataSerial.available()>0)
+    {
+      data += char (DataSerial.read());
+    }
+    //buang spasi data
+    data.trim();
+    
+    //uji data
+    if(data != "")
+    {
+      //format data "10#29.45#89.50" = array (setelah parsing)
+      //parsing data (pecah data)
+      int index = 0;
+      for(int i=0; i<= data.length(); i++)
+      { 
+        char delimiter = '#';
+        if(data[i] != delimiter)
+        arrData[index] += data[i];
+        else 
+        index++; //variabel index bertambah 1
+      }
+
+      //pastikan bahwa data yang dikirim lengkap (Suhu,pH)
+      if(index == 3)
+      {
+        //tampilkan nilai sensor ke serial monitor
+        Serial.println("ph : " + arrData[0]); //Nilai pH
+        Serial.println("Suhu   : " + arrData[1]); //Nilai Suhu
+        Serial.println("TDS   : " + arrData[2]); //Nilai TDS
+        Serial.println("Gram  : " + arrData[3]); //Nilai Berat Pakan
+        Serial.println();
+      } 
+  //isi variabel yang akan dikirim
+      
+      ph          = arrData[0].toFloat();
+      suhu        = arrData[1].toFloat();
+      tds         = arrData[2].toFloat();
+      berat       = arrData[3].toFloat();
+      
+     arrData[0]= " ";
+     arrData[1]= " ";
+     arrData[2]= " ";
+     arrData[3]= " ";
+   }
+
+  //Minta data ke Arduino
+    DataSerial.println("Ya");
+  }
+ antares.add("pH",ph);
+ antares.add("Suhu",suhu);
+ antares.add("TDS",tds);
+ antares.add("Gram",berat);
+ antares.publish(projectName, deviceNameSatu);
+ delay(3000);
+}
+
+void callback(char topic[], byte payload[], unsigned int length) {
+antares.get(topic, payload, length);
+// Print topic and payload
+  Serial.println("Topic: " + antares.getTopic());
+  Serial.println("Payload: " + antares.getPayload());
+     // Variabel Penampung Data Yang Dikirim
+  //nyala dan matikan Servo
+  Serial.println("Servo: " + antares.getString("StatusDeploy"));
+  if( antares.getString("StatusDeploy") == "0" ) 
+  {
+    servo.write(0);
+  }
+  if( antares.getString("StatusDeploy") == "1" ) 
+  {
+    servo.write(50);
+  }
+}
