@@ -1,6 +1,6 @@
 - 👋 Hi, I’m Muhammad Rajendra Wiroseno
 - 👀 I’m interested in Internet of Things
-- 🌱 I’m currently learning MQTT protocol
+- 🌱 I’m currently learning MQTT protocol and Python
 - 📫 How to reach me : rwiroseno@gmail.com
 
 <!---
